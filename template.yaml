@@ -1,0 +1,56 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Post messages saved in sqs to slack.
+
+Parameters:
+  SlackApiToken:
+    Type: String
+
+Resources:
+  MessageQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      VisibilityTimeout: 300
+
+  DeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      VisibilityTimeout: 300
+
+  PostToSlackFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/
+      Handler: app.lambda_handler
+      Runtime: python3.7
+      Timeout: 30
+      MemorySize: 128
+      Tracing: Active
+      Environment:
+        Variables:
+          SLACK_API_TOKEN: !Ref SlackApiToken
+      Policies:
+        - SQSPollerPolicy:
+            QueueName: !GetAtt MessageQueue.QueueName
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt DeadLetterQueue.QueueName
+      DeadLetterQueue:
+        Type: SQS
+        TargetArn: !GetAtt DeadLetterQueue.Arn
+      Events:
+        PollingMessageQueue:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt MessageQueue.Arn
+            BatchSize: 1
+            Enabled: true
+
+Outputs:
+  MessageQueueName:
+    Value: !GetAtt MessageQueue.QueueName
+  MessageQueueArn:
+    Value: !GetAtt MessageQueue.Arn
+  DeadLetterQueueName:
+    Value: !GetAtt DeadLetterQueue.QueueName
+  DeadLetterQueueArn:
+    Value: !GetAtt DeadLetterQueue.Arn
